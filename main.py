@@ -9,11 +9,9 @@ SERVICE_ACCOUNT_FILE = 'credential.json'
 
 SCOPES = ['https://www.googleapis.com/auth/drive.file']
 
-# Xác thực sử dụng tài khoản dịch vụ
 credentials = service_account.Credentials.from_service_account_file(
     SERVICE_ACCOUNT_FILE, scopes=SCOPES)
 
-# Xây dựng dịch vụ Drive API
 service = build('drive', 'v3', credentials=credentials)
 
 def parse_args():
@@ -33,25 +31,22 @@ def upload_file_to_drive(data_dir, drive_folder_id=None):
     uploaded_file_ids = []
 
     for file_path in os.listdir(data_dir):
-        print(file_path)
         file_metadata = {'name': file_path.split('/')[-1]}
         if drive_folder_id:
             file_metadata['parents'] = [drive_folder_id]
 
         media = MediaFileUpload(os.path.join(data_dir,file_path), resumable=True)
 
-        # Tạo request tải lên file
         request = service.files().create(
             body=file_metadata,
             media_body=media,
             fields='id'
         )
 
-        # Thực thi request
         file = request.execute()
 
         uploaded_file_ids.append(file['id'])
-        print(f"File {file_path} uploaded to Drive with ID: {file['id']}")
+        print(f"File {file_path} uploaded to Drive with ID: {file['id']}\n")
 
     return uploaded_file_ids
 
@@ -59,7 +54,6 @@ def main():
     args = parse_args()
 
     data_dir = args.data_dir
-    print(data_dir)
     folder_id = args.folder_id
 
     upload_file_to_drive(data_dir=data_dir,drive_folder_id=folder_id)
