@@ -1,44 +1,68 @@
-from flask import Flask, request, jsonify
-from g_drive_service import GoogleDriveService
+from google.oauth2 import service_account
+from googleapiclient.discovery import build
+from googleapiclient.http import MediaFileUpload
+import argparse
+import os
 
-app=Flask(__name__)
-service=GoogleDriveService().build()
+# Đường dẫn đến file `credential.json` đã tải xuống từ Google Cloud Console
+SERVICE_ACCOUNT_FILE = 'credential.json'
 
-from io import BytesIO
-from googleapiclient.http import MediaIoBaseUpload
-from datetime import datetime
+SCOPES = ['https://www.googleapis.com/auth/drive.file']
 
-@app.get('/upload')
-def index():
-    return "Hello, World!"
+# Xác thực sử dụng tài khoản dịch vụ
+credentials = service_account.Credentials.from_service_account_file(
+    SERVICE_ACCOUNT_FILE, scopes=SCOPES)
 
-@app.post('/upload')
-def upload_file():
-    
-    uploaded_file=request.files.get("file")
+# Xây dựng dịch vụ Drive API
+service = build('drive', 'v3', credentials=credentials)
 
-    buffer_memory=BytesIO()
-    uploaded_file.save(buffer_memory)
+def parse_args():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--data-dir", type=str, default = "./data", help="Path to the  data directory ")
+    parser.add_argument("--folder-id", type=str, default = None, help="folder ID in drive")
 
-    media_body=MediaIoBaseUpload(uploaded_file, uploaded_file.mimetype, resumable=True)
-    created_at= datetime.now().strftime("%Y%m%d%H%M%S")
-    file_metadata={
-        "name":f"{uploaded_file.filename} ({created_at})",
-        "appProperties":{
-            "file_description":request.form.get("description")
-        }
-    }
+    return parser.parse_args()
 
-    returned_fields="id, name, mimeType, webViewLink, exportLinks, appProperties"
-    
-    upload_response=service.files().create(
-        body = file_metadata, 
-        media_body=media_body,  
-        fields=returned_fields
-    ).execute()
+def upload_file_to_drive(data_dir, drive_folder_id=None):
+    """
 
-    return upload_response
+    :param data_dir: Data directory contains files want to upload.
+    :param drive_folder_id: ID of folder in Drive want to upload to.
+    :return: ID of file uploaded.
+    """
+    uploaded_file_ids = []
 
- 
+    for file_path in os.listdir(data_dir):
+        print(file_path)
+        file_metadata = {'name': file_path.split('/')[-1]}
+        if drive_folder_id:
+            file_metadata['parents'] = [drive_folder_id]
+
+        media = MediaFileUpload(os.path.join(data_dir,file_path), resumable=True)
+
+        # Tạo request tải lên file
+        request = service.files().create(
+            body=file_metadata,
+            media_body=media,
+            fields='id'
+        )
+
+        # Thực thi request
+        file = request.execute()
+
+        uploaded_file_ids.append(file['id'])
+        print(f"File {file_path} uploaded to Drive with ID: {file['id']}")
+
+    return uploaded_file_ids
+
+def main():
+    args = parse_args()
+
+    data_dir = args.data_dir
+    print(data_dir)
+    folder_id = args.folder_id
+
+    upload_file_to_drive(data_dir=data_dir,drive_folder_id=folder_id)
+
 if __name__=='__main__':
-    app.run(debug=True, port=8000)
+    main()
